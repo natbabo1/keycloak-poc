@@ -1,0 +1,30 @@
+{
+  "realm": "nursing-dev",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "smart-nurse-dev",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": ["http://localhost:3200/api/auth/callback"],
+      "webOrigins": ["http://localhost:3200"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "realtime-monitoring-dev",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": ["http://localhost:3210/api/auth/callback"],
+      "webOrigins": ["http://localhost:3210"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}

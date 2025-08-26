@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: devpass
+    volumes:
+      - kc-db:/var/lib/postgresql/data
+    ports:
+      - "5431:5432"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.3
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: devpass
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+  smart-nurse:
+    build:
+      context: ./smart-nurse
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      NEXTAUTH_URL: http://localhost:3200
+      KC_ISSUER: http://localhost:8080/realms/nursing-dev
+      KC_SN_CLIENT_ID: smart-nurse-dev
+      KC_SN_CLIENT_SECRET: dev-secret # omit if public+PKCE
+      SN_BASE_URL: http://localhost:3200
+    volumes:
+      - ./smart-nurse:/app
+      - /app/node_modules
+    command: sh -c "npm ci && PORT=3200 npm run dev:docker"
+    ports:
+      - "3200:3200"
+    depends_on:
+      - keycloak
+
+  realtime-web:
+    build:
+      context: ./realtime-web
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      NEXTAUTH_URL: http://localhost:3210
+      KC_ISSUER: http://localhost:8080/realms/nursing-dev
+      KC_RTM_CLIENT_ID: realtime-monitoring-dev
+      KC_RTM_CLIENT_SECRET: dev-secret # omit if public+PKCE
+      RTM_BASE_URL: http://localhost:3210
+      RTM_API_BASE: http://realtime-api:3211 # internal service URL
+    volumes:
+      - ./realtime-web:/app
+      - /app/node_modules
+    command: sh -c "npm ci && npm run dev:docker"
+    ports:
+      - "3210:3210"
+    depends_on:
+      - keycloak
+      - realtime-api
+
+  realtime-api:
+    build:
+      context: ./realtime-api
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      PORT: 3211
+      JWKS_URI: http://localhost:8080/realms/nursing-dev/protocol/openid-connect/certs
+      JWT_ISSUER: http://localhost:8080/realms/nursing-dev
+      JWT_AUDIENCE: realtime-monitoring-dev
+    volumes:
+      - ./realtime-api:/app
+      - /app/node_modules
+    command: sh -c "npm ci && npm run start:dev"
+    ports:
+      - "3211:3211"
+    depends_on:
+      - keycloak
+
+volumes:
+  kc-db: {}
