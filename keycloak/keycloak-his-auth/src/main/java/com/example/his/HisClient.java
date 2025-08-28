@@ -94,6 +94,7 @@ public class HisClient {
     }
 
     // Extract candidates (null if missing/blank)
+    // XTODO: CHANGE BASE ON HIS CODE SCHEMA
     String email = nv(json.at("/Result/result/email"));
     String employeeId = nv(json.at("/Result/result/employeeId"));
     String securityRowId = nv(json.at("/Result/result/securityRowId"));
