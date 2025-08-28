@@ -13,6 +13,8 @@ services:
       - "5431:5432"
 
   keycloak:
+    tmpfs:
+      - /tmp:size=256m
     build:
       context: ./keycloak
       dockerfile: Dockerfile
@@ -25,6 +27,11 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: devpass
       KC_LOG_LEVEL: "INFO,org.keycloak.authentication:DEBUG"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME_PORT: "8080"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
     volumes:
       - ./keycloak/realms:/opt/keycloak/data/import
     depends_on:
@@ -40,10 +47,12 @@ services:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:3200
       KC_ISSUER: http://localhost:8080/realms/nursing-dev
+      KC_INTERNAL_BASE: http://keycloak:8080/realms/nursing-dev
       KC_SN_CLIENT_ID: smart-nurse-dev
       KC_SN_CLIENT_SECRET: dev-secret # omit if public+PKCE
       SN_BASE_URL: http://localhost:3200
       RTM_BASE_URL: http://localhost:3210
+      NEXTAUTH_SECRET: bb0604c6eaad8a88d207d515dc07fd1bcb556376799b8b89887864d3a8165878
     volumes:
       - ./smart-nurse:/app
       - /app/node_modules
@@ -61,10 +70,12 @@ services:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:3210
       KC_ISSUER: http://localhost:8080/realms/nursing-dev
+      KC_INTERNAL_BASE: http://keycloak:8080/realms/nursing-dev
       KC_RTM_CLIENT_ID: realtime-monitoring-dev
       KC_RTM_CLIENT_SECRET: dev-secret # omit if public+PKCE
       RTM_BASE_URL: http://localhost:3210
       RTM_API_BASE: http://realtime-api:3211 # internal service URL
+      NEXTAUTH_SECRET: 761b0483c43ebebb221c6caeb706980260acd1ea13c5c9f02dd6c2fd5a18cbe8
     volumes:
       - ./realtime-web:/app
       - /app/node_modules

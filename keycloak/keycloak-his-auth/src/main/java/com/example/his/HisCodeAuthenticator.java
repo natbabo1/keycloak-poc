@@ -1,9 +1,7 @@
 package com.example.his;
 
 import jakarta.ws.rs.core.MultivaluedMap;
-import org.keycloak.authentication.Authenticator;
-import org.keycloak.authentication.AuthenticationFlowContext;
-import org.keycloak.authentication.AuthenticationFlowError;
+import org.keycloak.authentication.*;
 import org.keycloak.models.*;
 
 import java.util.Collections;
@@ -11,47 +9,47 @@ import java.util.Map;
 import java.util.Optional;
 
 public class HisCodeAuthenticator implements Authenticator {
-
   @Override
   public void authenticate(AuthenticationFlowContext ctx) {
     MultivaluedMap<String, String> qp = ctx.getHttpRequest().getUri().getQueryParameters();
     String hisCode = qp.getFirst("his_code");
 
     if (hisCode == null || hisCode.isBlank()) {
-      ctx.attempted(); // no code -> continue normal Browser flow
+      ctx.attempted();
       return;
     }
 
-    Map<String, String> cfg = Optional.ofNullable(ctx.getAuthenticatorConfig())
-      .map(ac -> ac.getConfig())
-      .orElse(Collections.emptyMap());
+    Map<String,String> cfg = Optional.ofNullable(ctx.getAuthenticatorConfig())
+      .map(c -> c.getConfig()).orElse(Collections.emptyMap());
 
     String url       = cfg.getOrDefault("hisEndpoint", "");
     String hdrName   = cfg.getOrDefault("hisHeaderName", "accesstoken");
     String hdrValue  = cfg.getOrDefault("hisHeaderValue", "");
     String restUser  = cfg.getOrDefault("hisRestUser", "");
     String restPass  = cfg.getOrDefault("hisRestPass", "");
-    int timeoutMs    = Integer.parseInt(cfg.getOrDefault("timeoutMs", "4000"));
+    String subjPri   = cfg.getOrDefault("subjectPriority","employeeId,email,securityRowId,keyResult");
+    boolean any2xx   = Boolean.parseBoolean(cfg.getOrDefault("acceptAny2xx","true"));
+    boolean needR0   = Boolean.parseBoolean(cfg.getOrDefault("requireR0000","false"));
+    boolean chkExp   = Boolean.parseBoolean(cfg.getOrDefault("checkExpiry","true"));
+    long skewMs      = Long.parseLong(cfg.getOrDefault("clockSkewMs","60000"));
+    int timeoutMs    = Integer.parseInt(cfg.getOrDefault("timeoutMs","4000"));
     boolean insecure = Boolean.parseBoolean(cfg.getOrDefault("insecureTLS","false"));
-    boolean hardFail = Boolean.parseBoolean(cfg.getOrDefault("failOnInvalid","true"));
 
     HisClient.HisProfile prof;
     try {
       prof = new HisClient(url, hdrName, hdrValue, restUser, restPass, timeoutMs, insecure)
-        .validate(hisCode);
+        .validate(hisCode, subjPri, any2xx, needR0, chkExp, skewMs);
     } catch (Exception e) {
-      if (hardFail) { ctx.failure(AuthenticationFlowError.INTERNAL_ERROR); }
-      else { ctx.attempted(); }
+      ctx.failure(AuthenticationFlowError.INTERNAL_ERROR);
       return;
     }
 
     if (prof == null || prof.sub == null || prof.sub.isBlank()) {
-      if (hardFail) { ctx.failure(AuthenticationFlowError.INVALID_CREDENTIALS); }
-      else { ctx.attempted(); }
+      ctx.failure(AuthenticationFlowError.INVALID_CREDENTIALS);
       return;
     }
 
-    RealmModel realm = ctx.getRealm();
+        RealmModel realm = ctx.getRealm();
     KeycloakSession session = ctx.getSession();
     UserProvider users = session.users();
 
@@ -59,20 +57,22 @@ public class HisCodeAuthenticator implements Authenticator {
     if (user == null) {
       user = users.addUser(realm, prof.sub);
       user.setEnabled(true);
-      if (prof.email != null) user.setEmail(prof.email);
-      if (prof.givenName != null) user.setFirstName(prof.givenName);
-      if (prof.familyName != null) user.setLastName(prof.familyName);
-      user.setSingleAttribute("hisSource", "true");
     }
 
-    // Optional: grant realm roles if they exist
-    for (String r : prof.roles) {
-      RoleModel role = realm.getRole(r);
-      if (role != null) user.grantRole(role);
+    if (prof.email != null && !prof.email.isBlank()) user.setEmail(prof.email);
+
+    // store extras as attributes (no lambda capture)
+    for (java.util.Map.Entry<String,String> e : prof.attrs.entrySet()) {
+      String v = e.getValue();
+      if (v != null && !v.isBlank()) {
+        user.setSingleAttribute(e.getKey(), v);
+      }
     }
+    user.setSingleAttribute("hisSource","true");
 
     ctx.setUser(user);
     ctx.success();
+
   }
 
   @Override public void action(AuthenticationFlowContext ctx) {}

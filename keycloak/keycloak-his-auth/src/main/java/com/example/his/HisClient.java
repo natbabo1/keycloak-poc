@@ -7,6 +7,7 @@ import javax.net.ssl.*;
 import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 public class HisClient {
@@ -39,51 +40,97 @@ public class HisClient {
         SSLContext sc = SSLContext.getInstance("TLS");
         sc.init(null, trustAll, new java.security.SecureRandom());
         b.sslContext(sc);
-        b.sslParameters(new SSLParameters(){{
-          setEndpointIdentificationAlgorithm(null); // disable hostname verify
-        }});
+        SSLParameters sp = new SSLParameters();
+        sp.setEndpointIdentificationAlgorithm(null);
+        b.sslParameters(sp);
       } catch (Exception ignored) {}
     }
     this.http = b.build();
   }
 
-  public HisProfile validate(String hisCode) throws Exception {
-    String json = om.writeValueAsString(Map.of(
-      "key", hisCode,
-      "restuser", restUser,
-      "restpass", restPass
-    ));
+  public HisProfile validate(String hisCode,
+                             String subjectPriorityCsv,
+                             boolean acceptAny2xx,
+                             boolean requireR0000,
+                             boolean checkExpiry,
+                             long clockSkewMs) throws Exception {
+
+    String body = "{\"key\":\"" + hisCode + "\",\"restuser\":\"" + restUser + "\",\"restpass\":\"" + restPass + "\"}";
 
     HttpRequest.Builder rb = HttpRequest.newBuilder(URI.create(endpoint))
       .timeout(Duration.ofMillis(timeoutMs))
       .header("Content-Type","application/json")
-      .POST(HttpRequest.BodyPublishers.ofString(json));
+      .POST(HttpRequest.BodyPublishers.ofString(body));
 
     if (headerName != null && !headerName.isBlank() && headerValue != null && !headerValue.isBlank()) {
       rb.header(headerName, headerValue);
     }
 
     HttpResponse<String> res = http.send(rb.build(), HttpResponse.BodyHandlers.ofString());
-    if (res.statusCode() != 200) return null;
+    int sc = res.statusCode();
+    if (sc < 200 || sc >= 300) return null; // must be 2xx
 
-    JsonNode j = om.readTree(res.body());
-    // If your mock returns a specific success flag, check it here:
-    // if (!j.path("ok").asBoolean(true)) return null;
+    JsonNode json = om.readTree(res.body());
+
+    if (!acceptAny2xx) {
+      String code = json.at("/ResponseStatus/Code").asText("");
+      if (requireR0000 && !"R0000".equals(code)) return null;
+    }
+
+    if (checkExpiry) {
+      long now = System.currentTimeMillis();
+      long exp = json.at("/Result/result/expired").asLong(0L);
+      if (exp > 0 && now > exp + clockSkewMs) return null; // expired
+    }
+
+    // Extract candidates (null if missing/blank)
+    String email         = nv(json.at("/Result/result/email"));
+    String employeeId    = nv(json.at("/Result/result/employeeId"));
+    String securityRowId = nv(json.at("/Result/result/securityRowId"));
+    String appointmentId = nv(json.at("/Result/result/appointmentId"));
+    String keyResult     = nv(json.at("/Result/keyResult"));
+
+    // Choose subject
+    String[] pri = (subjectPriorityCsv == null || subjectPriorityCsv.isBlank())
+      ? new String[]{"employeeId","email","securityRowId","keyResult"}
+      : subjectPriorityCsv.split("\\s*,\\s*");
+
+    String sub = null;
+    for (String p : pri) {
+      switch (p) {
+        case "employeeId":    if (nz(employeeId))    { sub = "emp-" + employeeId; break; } continue;
+        case "email":         if (nz(email))         { sub = email; break; } continue;
+        case "securityRowId": if (nz(securityRowId)) { sub = "sec-" + securityRowId; break; } continue;
+        case "keyResult":     if (nz(keyResult))     { sub = "key-" + keyResult; break; } continue;
+        case "hisCode":       if (nz(hisCode))       { sub = "his-" + hisCode; break; } continue;
+        default: continue;
+      }
+      if (sub != null) break;
+    }
+    if (!nz(sub)) sub = "his-" + hisCode; // last resort
 
     HisProfile p = new HisProfile();
-    // Try to read identity if present; else fall back to code-based subject
-    p.sub = j.path("sub").asText(null);
-    if (p.sub == null || p.sub.isBlank()) p.sub = "his-" + hisCode; // POC fallback
-    p.email = j.path("email").asText(null);
-    p.givenName = j.path("given_name").asText(null);
-    p.familyName = j.path("family_name").asText(null);
-    if (j.has("roles")) j.get("roles").forEach(n -> p.addRole(n.asText()));
+    p.sub = sub;
+    p.email = email;
+    p.attrs.put("employeeId", n(employeeId));
+    p.attrs.put("securityRowId", n(securityRowId));
+    p.attrs.put("appointmentId", n(appointmentId));
+    p.attrs.put("keyResult", n(keyResult));
     return p;
   }
 
+  // --- helpers ---
+  private static boolean nz(String s) { return s != null && !s.isBlank(); }
+  private static String n(String s) { return s == null ? "" : s; }
+  private static String nv(JsonNode node) {
+    if (node == null || node.isMissingNode() || node.isNull()) return null;
+    String s = node.asText(null);
+    return (s == null || s.isBlank()) ? null : s;
+  }
+
   public static class HisProfile {
-    public String sub, email, givenName, familyName;
-    public java.util.Set<String> roles = new java.util.HashSet<>();
-    public void addRole(String r) { roles.add(r); }
+    public String sub;
+    public String email;
+    public Map<String,String> attrs = new HashMap<>();
   }
 }
