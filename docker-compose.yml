@@ -28,7 +28,7 @@ services:
       KC_DB_PASSWORD: devpass
       KC_LOG_LEVEL: "INFO,org.keycloak.authentication:DEBUG"
       KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME: "localhost"
+      KC_HOSTNAME: "auth.local"
       KC_HOSTNAME_PORT: "8080"
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
@@ -46,8 +46,8 @@ services:
     environment:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:3200
-      KC_ISSUER: http://localhost:8080/realms/nursing-dev
-      KC_INTERNAL_BASE: http://keycloak:8080/realms/nursing-dev
+      KC_ISSUER: http://auth.local:8080/realms/nursing-dev
+      KC_INTERNAL_BASE: http://auth.local:8080/realms/nursing-dev
       KC_SN_CLIENT_ID: smart-nurse-dev
       KC_SN_CLIENT_SECRET: dev-secret # omit if public+PKCE
       SN_BASE_URL: http://localhost:3200
@@ -57,6 +57,8 @@ services:
       - ./smart-nurse:/app
       - /app/node_modules
     command: sh -c "npm ci && PORT=3200 npm run dev:docker"
+    extra_hosts:
+      - "auth.local:host-gateway"
     ports:
       - "3200:3200"
     depends_on:
@@ -69,8 +71,8 @@ services:
     environment:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:3210
-      KC_ISSUER: http://localhost:8080/realms/nursing-dev
-      KC_INTERNAL_BASE: http://keycloak:8080/realms/nursing-dev
+      KC_ISSUER: http://auth.local:8080/realms/nursing-dev
+      KC_INTERNAL_BASE: http://auth.local:8080/realms/nursing-dev
       KC_RTM_CLIENT_ID: realtime-monitoring-dev
       KC_RTM_CLIENT_SECRET: dev-secret # omit if public+PKCE
       RTM_BASE_URL: http://localhost:3210
@@ -82,6 +84,8 @@ services:
     command: sh -c "npm ci && npm run dev:docker"
     ports:
       - "3210:3210"
+    extra_hosts:
+      - "auth.local:host-gateway"
     depends_on:
       - keycloak
       - realtime-api
@@ -93,8 +97,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3211
-      JWKS_URI: http://localhost:8080/realms/nursing-dev/protocol/openid-connect/certs
-      JWT_ISSUER: http://localhost:8080/realms/nursing-dev
+      JWKS_URI: http://auth.local:8080/realms/nursing-dev/protocol/openid-connect/certs
+      JWT_ISSUER: http://auth.local:8080/realms/nursing-dev
       JWT_AUDIENCE: realtime-monitoring-dev
     volumes:
       - ./realtime-api:/app

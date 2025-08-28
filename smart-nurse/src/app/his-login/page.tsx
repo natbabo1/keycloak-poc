@@ -6,21 +6,20 @@ import { signIn } from "next-auth/react";
 
 export default function HisLogin() {
   const sp = useSearchParams();
+  const error = sp.get("error");
 
   useEffect(() => {
-    const service = sp.get("service") ?? "";
-    const his_code = sp.get("his_code") ?? "";
-    const origin = window.location.origin;
-    const callbackUrl = `${origin}/post-login${
-      service ? `?service=${encodeURIComponent(service)}` : ""
-    }`;
+    if (error) return; // don't loop on errors
+    const callbackUrl = sp.get("callback_url") ?? "";
+    const his_code = sp.get("his_code") ?? ""; // or login_hint if you switched
 
-    console.log("FWD callbackUrl", callbackUrl);
     console.log("FWD his_code", his_code);
+    console.log("FWD callback_url", callbackUrl);
 
-    // This forwards `his_code` into Keycloak's /auth request
-    signIn("keycloak", undefined, { callbackUrl, his_code });
-  }, [sp]);
+    const params: Record<string, string> = { callbackUrl };
+    if (his_code) params.his_code = his_code; // preferred over custom query
+    signIn("keycloak", { callbackUrl }, params);
+  }, [sp, error]);
 
   return <p>Redirecting to Keycloak…</p>;
 }
