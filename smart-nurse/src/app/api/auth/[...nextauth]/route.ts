@@ -12,6 +12,7 @@ const handler = NextAuth({
       clientSecret: "",
     }),
   ],
+  pages: { signIn: "/sn-login" },
   session: { strategy: "jwt", maxAge: 60 * 60 * 8 },
 });
 export { handler as GET, handler as POST };

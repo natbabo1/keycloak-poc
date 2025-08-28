@@ -13,9 +13,6 @@ export default function HisLogin() {
     const callbackUrl = sp.get("callback_url") ?? "";
     const his_code = sp.get("his_code") ?? ""; // or login_hint if you switched
 
-    console.log("FWD his_code", his_code);
-    console.log("FWD callback_url", callbackUrl);
-
     const params: Record<string, string> = { callbackUrl };
     if (his_code) params.his_code = his_code; // preferred over custom query
     signIn("keycloak", { callbackUrl }, params);

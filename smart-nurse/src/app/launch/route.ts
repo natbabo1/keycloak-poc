@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const service = url.searchParams.get("service") || "";
   const hisCode = url.searchParams.get("his_code") || "";
-  const target = SERVICE_MAP[service];
+  const target = SERVICE_MAP[service] ?? SERVICE_MAP.sn;
   if (!target)
     return NextResponse.json({ error: "invalid service" }, { status: 400 });
 
